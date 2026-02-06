@@ -1,6 +1,7 @@
 """SAP AI Documentation Assistant — Streamlit UI."""
 
 import html
+import re
 from datetime import datetime, timezone
 
 import streamlit as st
@@ -51,6 +52,128 @@ st.markdown(
         white-space: normal;
         text-align: left;
     }
+
+    /* ── Pipeline dashboard ─────────────────────── */
+    .pipeline-card {
+        background: #FFFFFF;
+        border: 1px solid #E0E0E0;
+        border-radius: 10px;
+        padding: 1.1rem 1.2rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .pipeline-card-header {
+        font-size: 1.05rem;
+        font-weight: 700;
+        border-left: 4px solid #0070F2;
+        padding-left: 0.6rem;
+        margin-bottom: 0.75rem;
+        color: #1A1A1A;
+    }
+    .score-badge {
+        display: inline-block;
+        text-align: center;
+        padding: 0.4rem 0.9rem;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        font-weight: 700;
+        margin: 0.2rem 0.15rem;
+        min-width: 80px;
+    }
+    .score-safe    { background: #DFF6DD; color: #1E7D1E; }
+    .score-caution { background: #FFF4CE; color: #9A6700; }
+    .score-danger  { background: #FFE0E0; color: #C41E3A; }
+    .filter-status-passed {
+        display: inline-block;
+        padding: 2px 12px;
+        border-radius: 12px;
+        background: #DFF6DD;
+        color: #1E7D1E;
+        font-weight: 600;
+        font-size: 0.82rem;
+    }
+    .filter-status-blocked {
+        display: inline-block;
+        padding: 2px 12px;
+        border-radius: 12px;
+        background: #FFE0E0;
+        color: #C41E3A;
+        font-weight: 600;
+        font-size: 0.82rem;
+    }
+    .model-chip {
+        display: inline-block;
+        padding: 3px 14px;
+        border-radius: 14px;
+        background: #E8F0FE;
+        color: #0070F2;
+        font-weight: 600;
+        font-size: 0.88rem;
+    }
+    .masking-field {
+        background: #F8F9FA;
+        border-left: 3px solid #0070F2;
+        padding: 0.55rem 0.8rem;
+        margin: 0.4rem 0;
+        border-radius: 0 6px 6px 0;
+        font-size: 0.9rem;
+    }
+    .masking-field-label {
+        font-weight: 600;
+        color: #555;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+    .masked-token {
+        display: inline;
+        background: #FFF0F0;
+        border: 1px solid #E8A0A0;
+        border-radius: 4px;
+        padding: 1px 7px;
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.84rem;
+        font-weight: 600;
+        color: #C41E3A;
+        letter-spacing: 0.2px;
+    }
+    .entity-badge {
+        display: inline-block;
+        padding: 1px 8px;
+        border-radius: 10px;
+        background: #E8F0FE;
+        color: #0070F2;
+        font-size: 0.78rem;
+        font-weight: 600;
+        margin-right: 4px;
+    }
+    .tool-call-name {
+        font-weight: 700;
+        color: #0070F2;
+        font-size: 0.95rem;
+    }
+    .tool-call-count {
+        display: inline-block;
+        padding: 1px 10px;
+        border-radius: 10px;
+        background: #E8F0FE;
+        color: #0070F2;
+        font-size: 0.78rem;
+        font-weight: 600;
+        margin-left: 6px;
+    }
+    .role-badge {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 12px;
+        color: #FFFFFF;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+    .role-system    { background: #0070F2; }
+    .role-user      { background: #8B5CF6; }
+    .role-assistant { background: #188918; }
+    .role-tool      { background: #E78C07; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -94,6 +217,20 @@ def _confidence_label(score: float) -> str:
     if score >= 0.45:
         return f'<span class="confidence-medium">{pct}</span>'
     return f'<span class="confidence-low">{pct}</span>'
+
+
+def _score_severity_class(score: float) -> str:
+    """Return CSS class based on content-filter score severity."""
+    if score < 0.3:
+        return "score-safe"
+    if score < 0.6:
+        return "score-caution"
+    return "score-danger"
+
+
+def _role_css_class(role: str) -> str:
+    """Return CSS class for a message role."""
+    return f"role-{role}" if role in ("system", "user", "assistant", "tool") else "role-system"
 
 
 def _export_markdown(history: list[dict]) -> str:
@@ -143,74 +280,137 @@ def _handle_question(question: str) -> None:
 
 
 def _render_pipeline(pipeline: dict, index: int) -> None:
-    """Render pipeline orchestration details inside an expander."""
+    """Render pipeline orchestration details as a visual dashboard."""
     with st.expander("Pipeline details", expanded=False):
-        # Data masking
-        masking = pipeline.get("data_masking")
-        st.subheader("Data Masking", divider="blue")
-        if masking:
-            st.markdown(f"**Original query:** {html.escape(masking['original_query'])}")
-            st.markdown(f"**Masked query:** {html.escape(masking['masked_query'])}")
-            if masking.get("entities_masked"):
-                st.markdown(f"**Entities masked:** {', '.join(masking['entities_masked'])}")
-        else:
-            st.caption("No PII detected — query sent unmasked.")
 
-        # Content filtering
+        # ── Data Masking ──────────────────────────────────────────
+        masking = pipeline.get("data_masking")
+        if masking:
+            entities_html = ""
+            if masking.get("entities_masked"):
+                badges = "".join(
+                    f'<span class="entity-badge">{html.escape(e)}</span>'
+                    for e in masking["entities_masked"]
+                )
+                entities_html = (
+                    f'<div style="margin-top:0.5rem">'
+                    f'<span class="masking-field-label">Entities masked</span><br>{badges}'
+                    f'</div>'
+                )
+            # Escape first, then highlight MASKED_* tokens
+            masked_query_safe = html.escape(masking["masked_query"])
+            masked_query_safe = re.sub(
+                r"(MASKED_\w+)",
+                r'<span class="masked-token">\1</span>',
+                masked_query_safe,
+            )
+            st.markdown(
+                f'<div class="pipeline-card">'
+                f'<div class="pipeline-card-header">Data Masking</div>'
+                f'<div class="masking-field">'
+                f'<span class="masking-field-label">Original query</span><br>'
+                f'{html.escape(masking["original_query"])}'
+                f'</div>'
+                f'<div class="masking-field">'
+                f'<span class="masking-field-label">Masked query</span><br>'
+                f'{masked_query_safe}'
+                f'</div>'
+                f'{entities_html}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div class="pipeline-card">'
+                '<div class="pipeline-card-header">Data Masking</div>'
+                '<em style="color:#888">No PII detected — query sent unmasked.</em>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
+        # ── Content Filtering ─────────────────────────────────────
         filtering = pipeline.get("content_filtering")
         if filtering:
-            st.subheader("Content Filtering", divider="blue")
             col_in, col_out = st.columns(2)
+            categories = ["hate", "self_harm", "sexual", "violence"]
+            category_labels = {"hate": "Hate", "self_harm": "Self-harm", "sexual": "Sexual", "violence": "Violence"}
             for label, col, scores in [
                 ("Input", col_in, filtering.get("input", {})),
                 ("Output", col_out, filtering.get("output", {})),
             ]:
                 with col:
-                    passed = scores.get("passed", True)
-                    status = "Passed" if passed else "Blocked"
-                    st.markdown(f"**{label}:** {status}")
-                    st.caption(
-                        f"hate={scores.get('hate', 0)}  "
-                        f"self_harm={scores.get('self_harm', 0)}  "
-                        f"sexual={scores.get('sexual', 0)}  "
-                        f"violence={scores.get('violence', 0)}"
-                    )
+                    with st.container(border=True):
+                        passed = scores.get("passed", True)
+                        status_cls = "filter-status-passed" if passed else "filter-status-blocked"
+                        status_text = "Passed" if passed else "Blocked"
+                        st.markdown(
+                            f'<div class="pipeline-card-header">'
+                            f'Content Filtering — {label} '
+                            f'<span class="{status_cls}">{status_text}</span>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                        badge_html = ""
+                        for cat in categories:
+                            score = scores.get(cat, 0)
+                            sev = _score_severity_class(score)
+                            cat_label = html.escape(category_labels[cat])
+                            badge_html += (
+                                f'<span class="score-badge {sev}">'
+                                f'{cat_label}<br>{score:.2f}'
+                                f'</span> '
+                            )
+                        st.markdown(badge_html, unsafe_allow_html=True)
 
-        # LLM details
+        # ── LLM / Tokens ─────────────────────────────────────────
         llm = pipeline.get("llm")
         if llm:
-            st.subheader("LLM", divider="blue")
-            st.markdown(f"**Model:** `{html.escape(llm['model'])}`")
-            st.markdown(
-                f"**Tokens:** {llm['prompt_tokens']} prompt + "
-                f"{llm['completion_tokens']} completion = "
-                f"{llm['prompt_tokens'] + llm['completion_tokens']} total"
-            )
+            with st.container(border=True):
+                st.markdown(
+                    f'<div class="pipeline-card-header">'
+                    f'LLM <span class="model-chip">{html.escape(llm["model"])}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                prompt_tok = llm["prompt_tokens"]
+                completion_tok = llm["completion_tokens"]
+                total_tok = prompt_tok + completion_tok
+                mc1, mc2, mc3 = st.columns(3)
+                mc1.metric("Prompt", f"{prompt_tok:,}")
+                mc2.metric("Completion", f"{completion_tok:,}")
+                mc3.metric("Total", f"{total_tok:,}")
 
-        # Tool calls
+        # ── Tool Calls ────────────────────────────────────────────
         tool_calls = pipeline.get("tool_calls")
         if tool_calls:
-            st.subheader("Tool Calls", divider="blue")
-            for tc in tool_calls:
-                st.markdown(f"**`{html.escape(tc['tool_name'])}`** — {tc['result_count']} results")
-                st.json(tc["arguments"])
-                if tc.get("results_preview"):
-                    st.caption("Results preview:")
-                    for preview in tc["results_preview"]:
-                        st.caption(
-                            f"  - {html.escape(str(preview.get('id', '')))} "
-                            f"— {html.escape(str(preview.get('title', '')))}"
-                        )
+            for tc_idx, tc in enumerate(tool_calls):
+                with st.container(border=True):
+                    st.markdown(
+                        f'<span class="tool-call-name">{html.escape(tc["tool_name"])}</span>'
+                        f'<span class="tool-call-count">{tc["result_count"]} results</span>',
+                        unsafe_allow_html=True,
+                    )
+                    st.json(tc["arguments"], expanded=False)
+                    if tc.get("results_preview"):
+                        st.caption("Results preview:")
+                        for preview in tc["results_preview"]:
+                            st.caption(
+                                f"  - {html.escape(str(preview.get('id', '')))} "
+                                f"— {html.escape(str(preview.get('title', '')))}"
+                            )
 
-        # Messages to LLM
+        # ── Messages to LLM ──────────────────────────────────────
         messages = pipeline.get("messages_to_llm")
         if messages:
-            st.subheader("Messages to LLM", divider="blue")
-            for msg in messages:
-                role = html.escape(msg["role"])
-                content = html.escape(msg["content"])
-                st.markdown(f"**{role}**")
-                st.code(content, language=None)
+            for msg_idx, msg in enumerate(messages):
+                with st.container(border=True):
+                    role = msg["role"]
+                    role_cls = _role_css_class(role)
+                    st.markdown(
+                        f'<span class="role-badge {role_cls}">{html.escape(role)}</span>',
+                        unsafe_allow_html=True,
+                    )
+                    st.code(msg["content"], language=None)
 
 
 def _render_answer_card(entry: dict, index: int) -> None:
