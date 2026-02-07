@@ -2,7 +2,7 @@
 applications:
   - name: sap-ai-doc-assistant-ui
     memory: 256M
-    disk_quota: 512M
+    disk_quota: 1G
     instances: 1
     buildpacks:
       - python_buildpack
