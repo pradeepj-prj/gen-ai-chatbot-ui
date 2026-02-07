@@ -6,6 +6,7 @@ API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000").rstrip("/
 HEALTH_ENDPOINT = f"{API_BASE_URL}/health"
 SERVICES_ENDPOINT = f"{API_BASE_URL}/api/v1/kb/services"
 ASK_ENDPOINT = f"{API_BASE_URL}/api/v1/ask"
+KB_ENTRIES_ENDPOINT = f"{API_BASE_URL}/api/v1/kb/entries"
 
 REQUEST_TIMEOUT = 30  # seconds
 
