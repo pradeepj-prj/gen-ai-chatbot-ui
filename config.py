@@ -33,6 +33,9 @@ SERVICE_COLORS = {
 
 DEFAULT_SERVICE_COLOR = "#6B7B8D"
 
+# Client-side masking entity types (rendered distinctly from SAP DPI entities)
+CLIENT_SIDE_ENTITIES = {"NRIC"}
+
 SUGGESTED_QUESTIONS = [
     "How do I deploy a model on SAP AI Core?",
     "How does the orchestration service work in Generative AI Hub?",

@@ -8,6 +8,7 @@ import streamlit as st
 
 from api_client import APIError, ask_question, check_health, fetch_services
 from config import (
+    CLIENT_SIDE_ENTITIES,
     DEFAULT_SERVICE_COLOR,
     MAX_QUESTION_LENGTH,
     SERVICE_COLORS,
@@ -146,6 +147,28 @@ st.markdown(
         font-size: 0.78rem;
         font-weight: 600;
         margin-right: 4px;
+    }
+    .entity-badge-custom {
+        display: inline-block;
+        padding: 1px 8px;
+        border-radius: 10px;
+        background: #FFF4CE;
+        color: #9A6700;
+        font-size: 0.78rem;
+        font-weight: 600;
+        margin-right: 4px;
+    }
+    .masked-token-custom {
+        display: inline;
+        background: #FFF4CE;
+        border: 1px solid #D4A843;
+        border-radius: 4px;
+        padding: 1px 7px;
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.84rem;
+        font-weight: 600;
+        color: #9A6700;
+        letter-spacing: 0.2px;
     }
     .tool-call-name {
         font-weight: 700;
@@ -288,19 +311,42 @@ def _render_pipeline(pipeline: dict, index: int) -> None:
         if masking:
             entities_html = ""
             if masking.get("entities_masked"):
-                badges = "".join(
-                    f'<span class="entity-badge">{html.escape(e)}</span>'
-                    for e in masking["entities_masked"]
-                )
-                entities_html = (
-                    f'<div style="margin-top:0.5rem">'
-                    f'<span class="masking-field-label">Entities masked</span><br>{badges}'
-                    f'</div>'
-                )
+                sap_entities = [e for e in masking["entities_masked"] if e not in CLIENT_SIDE_ENTITIES]
+                custom_entities = [e for e in masking["entities_masked"] if e in CLIENT_SIDE_ENTITIES]
+                parts = []
+                if sap_entities:
+                    sap_badges = "".join(
+                        f'<span class="entity-badge">{html.escape(e)}</span>'
+                        for e in sap_entities
+                    )
+                    parts.append(
+                        f'<div style="margin-top:0.5rem">'
+                        f'<span class="masking-field-label">Entities masked</span><br>{sap_badges}'
+                        f'</div>'
+                    )
+                if custom_entities:
+                    custom_badges = "".join(
+                        f'<span class="entity-badge-custom">{html.escape(e)}</span>'
+                        for e in custom_entities
+                    )
+                    parts.append(
+                        f'<div style="margin-top:0.5rem">'
+                        f'<span class="masking-field-label">Custom filters</span><br>{custom_badges}'
+                        f'</div>'
+                    )
+                entities_html = "".join(parts)
             # Escape first, then highlight MASKED_* tokens
             masked_query_safe = html.escape(masking["masked_query"])
+            # Client-side tokens (e.g. MASKED_NRIC) get amber styling
+            custom_token_pattern = "|".join(f"MASKED_{e}" for e in CLIENT_SIDE_ENTITIES)
             masked_query_safe = re.sub(
-                r"(MASKED_\w+)",
+                rf"({custom_token_pattern})",
+                r'<span class="masked-token-custom">\1</span>',
+                masked_query_safe,
+            )
+            # Remaining MASKED_* tokens get red SAP DPI styling (skip already-wrapped ones)
+            masked_query_safe = re.sub(
+                r'(?<!">)(MASKED_\w+)',
                 r'<span class="masked-token">\1</span>',
                 masked_query_safe,
             )
