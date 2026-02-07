@@ -11,4 +11,4 @@ applications:
     timeout: 120
     env:
       PYTHON_VERSION: 3.11.x
-      API_BASE_URL: https://sap-ai-doc-assistant.cfapps.<LANDSCAPE>.hana.ondemand.com
+      API_BASE_URL: https://sap-ai-doc-assistant.cfapps.ap10.hana.ondemand.com
