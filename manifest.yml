@@ -1,0 +1,14 @@
+---
+applications:
+  - name: sap-ai-doc-assistant-ui
+    memory: 256M
+    disk_quota: 512M
+    instances: 1
+    buildpacks:
+      - python_buildpack
+    command: streamlit run app.py --server.port $PORT --server.address 0.0.0.0
+    health-check-type: process
+    timeout: 120
+    env:
+      PYTHON_VERSION: 3.11.x
+      API_BASE_URL: https://sap-ai-doc-assistant.cfapps.<LANDSCAPE>.hana.ondemand.com
