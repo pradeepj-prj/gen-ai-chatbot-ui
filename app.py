@@ -170,11 +170,6 @@ st.markdown(
         color: #9A6700;
         letter-spacing: 0.2px;
     }
-    .tool-call-name {
-        font-weight: 700;
-        color: #0070F2;
-        font-size: 0.95rem;
-    }
     .tool-call-count {
         display: inline-block;
         padding: 1px 10px;
@@ -184,6 +179,35 @@ st.markdown(
         font-size: 0.78rem;
         font-weight: 600;
         margin-left: 6px;
+    }
+    .tc-preview-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 0.5rem;
+        font-size: 0.88rem;
+    }
+    .tc-preview-table th {
+        font-weight: 600;
+        color: #555;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        text-align: left;
+        padding: 0.4rem 0.6rem;
+        border-bottom: 2px solid #E0E0E0;
+    }
+    .tc-preview-table td {
+        padding: 0.35rem 0.6rem;
+        border-bottom: 1px solid #F0F0F0;
+    }
+    .tc-preview-table td code {
+        color: #0070F2;
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.84rem;
+        background: none;
+    }
+    .tc-preview-row:hover td {
+        background: #F8F9FA;
     }
     .role-badge {
         display: inline-block;
@@ -430,20 +454,64 @@ def _render_pipeline(pipeline: dict, index: int) -> None:
         tool_calls = pipeline.get("tool_calls")
         if tool_calls:
             for tc_idx, tc in enumerate(tool_calls):
-                with st.container(border=True):
-                    st.markdown(
-                        f'<span class="tool-call-name">{html.escape(tc["tool_name"])}</span>'
-                        f'<span class="tool-call-count">{tc["result_count"]} results</span>',
-                        unsafe_allow_html=True,
+                tool_name = html.escape(tc["tool_name"])
+                result_count = tc.get("result_count", 0)
+
+                # Build argument fields
+                args_html = ""
+                for arg_key, arg_val in tc.get("arguments", {}).items():
+                    label = html.escape(arg_key.replace("_", " "))
+                    value = html.escape(str(arg_val))
+                    args_html += (
+                        f'<div class="masking-field">'
+                        f'<span class="masking-field-label">{label}</span><br>'
+                        f'{value}'
+                        f'</div>'
                     )
-                    st.json(tc["arguments"], expanded=False)
-                    if tc.get("results_preview"):
-                        st.caption("Results preview:")
-                        for preview in tc["results_preview"]:
-                            st.caption(
-                                f"  - {html.escape(str(preview.get('id', '')))} "
-                                f"— {html.escape(str(preview.get('title', '')))}"
-                            )
+
+                # Build results preview table
+                preview_html = ""
+                previews = tc.get("results_preview") or []
+                if previews:
+                    rows = ""
+                    for p in previews:
+                        pid = html.escape(str(p.get("id", "")))
+                        ptitle = html.escape(str(p.get("title", "")))
+                        rows += (
+                            f'<tr class="tc-preview-row">'
+                            f'<td><code>{pid}</code></td>'
+                            f'<td>{ptitle}</td>'
+                            f'</tr>'
+                        )
+                    footer = ""
+                    if result_count > len(previews):
+                        footer = (
+                            f'<div style="margin-top:0.4rem;color:#888;font-size:0.82rem">'
+                            f'Showing {len(previews)} of {result_count} results'
+                            f'</div>'
+                        )
+                    preview_html = (
+                        f'<div style="margin-top:0.6rem">'
+                        f'<span class="masking-field-label">Results preview</span>'
+                        f'<table class="tc-preview-table">'
+                        f'<tr><th>ID</th><th>Title</th></tr>'
+                        f'{rows}'
+                        f'</table>'
+                        f'{footer}'
+                        f'</div>'
+                    )
+
+                st.markdown(
+                    f'<div class="pipeline-card">'
+                    f'<div class="pipeline-card-header">'
+                    f'{tool_name}'
+                    f'<span class="tool-call-count">{result_count} results</span>'
+                    f'</div>'
+                    f'{args_html}'
+                    f'{preview_html}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
         # ── Messages to LLM ──────────────────────────────────────
         messages = pipeline.get("messages_to_llm")
